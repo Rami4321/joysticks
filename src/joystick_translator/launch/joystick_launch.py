@@ -40,10 +40,9 @@ def build_nodes(context):
             )
         )
 
-    # Mapper should stay on screen if you want visual debug
     nodes.append(
         Node(
-            package='joystick_translator',
+            package='joystick_mapper',
             executable='joystick_mapper_node',
             name='dual_joystick_mapper',
             output='screen'

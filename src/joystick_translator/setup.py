@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'joystick_translator'
+package_name = 'joystick_mapper'
 
 setup(
     name=package_name,
@@ -16,7 +16,7 @@ setup(
     zip_safe=True,
     maintainer='root',
     maintainer_email='root@todo.todo',
-    description='TODO: Package description',
+    description='Maps raw joystick input into arm-level goal commands for the arm controller.',
     license='TODO: License declaration',
     extras_require={
         'test': [
