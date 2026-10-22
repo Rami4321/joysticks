@@ -3,7 +3,7 @@ version: '3.8'
 services:
   ros2_jazzy_joy:
     image: osrf/ros:jazzy-desktop #download ros jazzy
-    container_name: ros2_jazzy_joy_container
+    container_name: carmy_controller_jazzy
     network_mode: host
     ipc: host
     pid: host
@@ -16,5 +16,4 @@ services:
       - ROS_DOMAIN_ID=0
     tty: true
     stdin_open: true
-    command: >
-      bash -c "apt-get update && apt-get install -y ros-jazzy-joy && source /opt/ros/jazzy/setup.bash && ros2 run joy joy_node --ros-args -r __ns:=/stage_1 -p device_id:=0 & ros2 run joy joy_node --ros-args -r __ns:=/stage_2 -p device_id:=1"
+    command: ["bash", "/workspace/src/joy_entrypoint.sh"]

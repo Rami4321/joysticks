@@ -21,7 +21,7 @@ class DualJoystickMapper(Node):
         self.pub_stage_2 = self.create_publisher(Twist, '/stage_2/commands', 10)
         
         # Dashboard display timer
-        self.timer = self.create_timer(0.1, self.print_dashboard)
+        self.timer = self.create_timer(1.0, self.print_dashboard)
         self.get_logger().info("Pure Position Dual Joystick Dashboard Started!")
 
     def stage_1_callback(self, msg):
@@ -62,14 +62,13 @@ class DualJoystickMapper(Node):
         self.pub_stage_2.publish(cmd)
 
     def print_dashboard(self):
-        print("\033[H\033[J", end="") # Clear terminal cleanly
-        print("=========================================================================")
-        print("               THRUSTMASTER T.16000M PURE POSITION PANEL                 ")
-        print("=========================================================================")
-        print(f" [STAGE 1] X: {self.stg1['x']:+.2f} | Y: {self.stg1['y']:+.2f} | Z: {self.stg1['z']:+.2f} | Knob Slider: {self.stg1['knob']*100:3.0f}% | Trig: {self.stg1['trigger']}")
-        print(f" [STAGE 2] X: {self.stg2['x']:+.2f} | Y: {self.stg2['y']:+.2f} | Z: {self.stg2['z']:+.2f} | Knob Slider: {self.stg2['knob']*100:3.0f}% | Trig: {self.stg2['trigger']}")
-        print("=========================================================================")
-        print(" Press Ctrl+C to exit safely.")
+        message = (
+            f"[STAGE 1] X: {self.stg1['x']:+.2f} | Y: {self.stg1['y']:+.2f} | Z: {self.stg1['z']:+.2f} | "
+            f"Knob: {self.stg1['knob'] * 100:3.0f}% | Trigger: {self.stg1['trigger']} | "
+            f"[STAGE 2] X: {self.stg2['x']:+.2f} | Y: {self.stg2['y']:+.2f} | Z: {self.stg2['z']:+.2f} | "
+            f"Knob: {self.stg2['knob'] * 100:3.0f}% | Trigger: {self.stg2['trigger']}"
+        )
+        self.get_logger().info(message)
 
 def main(args=None):
     rclpy.init(args=args)
