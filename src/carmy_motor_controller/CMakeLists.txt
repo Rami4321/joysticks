@@ -65,10 +65,10 @@ ament_target_dependencies(rs_motor_ros2_node
   sensor_msgs
 )
 
-rosidl_target_interfaces(rs_motor_ros2_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
-
+rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_typesupport_cpp")
 target_link_libraries(rs_motor_ros2_node
   ${PROJECT_NAME}_lib
+  "${cpp_typesupport_target}"
 )
 
 # ament_target_dependencies(enable_motor
