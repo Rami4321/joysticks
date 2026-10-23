@@ -1,13 +1,12 @@
 import os
 from launch import LaunchDescription
-from launch.actions import OpaqueFunction
 from launch_ros.actions import Node
 
-def build_nodes(context):
+
+def generate_launch_description():
     nodes = []
 
-    # Only launch stage_1 if a joystick is actually present
-    if os.path.exists("/dev/input/js0"):
+    if os.path.exists('/dev/input/js0'):
         nodes.append(
             Node(
                 package='joy',
@@ -16,15 +15,15 @@ def build_nodes(context):
                 output='log',
                 parameters=[{
                     'dev': '/dev/input/js0',
+                    'device_id': 0,
                     'deadzone': 0.05,
-                    'autorepeat_rate': 20.0
+                    'autorepeat_rate': 20.0,
                 }],
-                remappings=[('/joy', '/stage_1/joy')]
+                remappings=[('/joy', '/stage_1/joy')],
             )
         )
 
-    # Only launch stage_2 if a second joystick is actually present
-    if os.path.exists("/dev/input/js1"):
+    if os.path.exists('/dev/input/js1'):
         nodes.append(
             Node(
                 package='joy',
@@ -33,10 +32,11 @@ def build_nodes(context):
                 output='log',
                 parameters=[{
                     'dev': '/dev/input/js1',
+                    'device_id': 1,
                     'deadzone': 0.05,
-                    'autorepeat_rate': 20.0
+                    'autorepeat_rate': 20.0,
                 }],
-                remappings=[('/joy', '/stage_2/joy')]
+                remappings=[('/joy', '/stage_2/joy')],
             )
         )
 
@@ -45,13 +45,8 @@ def build_nodes(context):
             package='joystick_mapper',
             executable='joystick_mapper_node',
             name='dual_joystick_mapper',
-            output='screen'
+            output='screen',
         )
     )
 
-    return nodes
-
-def generate_launch_description():
-    return LaunchDescription([
-        OpaqueFunction(function=build_nodes)
-    ])
+    return LaunchDescription(nodes)

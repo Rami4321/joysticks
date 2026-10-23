@@ -35,10 +35,10 @@ class DualJoystickMapper(Node):
         self.arm_target_pub = self.create_publisher(ArmTarget, '/arm_target', 10)
         
         #callback so that the arm target is published at a regular interval, even if no new joystick messages are received
-        self.timer = self.create_timer(0.1, self.publish_arm_target)
+        self.publish_timer = self.create_timer(0.1, self.publish_arm_target)
 
         # Optional dashboard timer for debugging
-        self.timer = self.create_timer(1.0, self.print_dashboard)
+        self.dashboard_timer = self.create_timer(1.0, self.print_dashboard)
         self.get_logger().info('Dual joystick mapper initialized.')
         self.get_logger().info('Mapping joystick inputs into the 2D-per-stage arm target format.')
 

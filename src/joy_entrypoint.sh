@@ -5,7 +5,7 @@ cat /workspace/src/ros_shell_setup.sh >> /root/.bashrc
 source /root/.bashrc
 
 apt-get update
-apt-get install -y ros-jazzy-joy
+apt-get install -y ros-jazzy-joy jstest-gtk
 
 echo "ROS environment ready. Keeping container alive..."
 tail -f /dev/null
