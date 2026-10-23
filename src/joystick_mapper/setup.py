@@ -25,7 +25,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'joystick_mapper_node = joystick_translator.joystick_mapper_node:main'
+            'joystick_mapper_node = joystick_mapper.joystick_mapper_node:main'
         ],
     },
 )
