@@ -7,5 +7,7 @@ source /root/.bashrc
 apt-get update
 apt-get install -y ros-jazzy-joy jstest-gtk
 
+source /opt/ros/jazzy/setup.bash
+
 echo "ROS environment ready. Keeping container alive..."
 tail -f /dev/null
