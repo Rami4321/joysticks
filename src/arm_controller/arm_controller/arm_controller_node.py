@@ -9,7 +9,7 @@ import math
 
 # Constants
 # How much to scale the arm target angles into motor commands. This is a placeholder value and should be tuned based on the actual arm mechanics.
-GAIN =  math.pi * 10
+GAIN = math.pi * 10
 
 STAGE_1_X_MOTOR_ID = 1
 STAGE_1_Y_MOTOR_ID = 2
@@ -36,10 +36,13 @@ class ArmControllerNode(Node):
 
         #publish motor commands to the custom motor message topic
         self.motor_pub = self.create_publisher(MotorMotionControl, '/motion_control', 10)
-        self.timer = self.create_timer(0.1, self.publish_motor_commands)
+        self.timer = self.create_timer(0.0125, self.publish_motor_commands)
 
         self.joystick_target = None  # Store the latest ArmTarget message
         self.pose = {name: [0.0, 0.0, 0.0, 0.0] for name in ID_TO_MOTOR_NAME.values()}  # Store the latest motor feedback
+        
+        self.next_motor = 1  # Initialize the next motor to be controlled
+        
         
 
     # Callback for receiving arm target messages
@@ -62,20 +65,28 @@ class ArmControllerNode(Node):
     def publish_motor_commands(self):
         target = self.joystick_target
         if target is None:
+            self.get_logger().info("No ArmTarget received yet. Skipping motor command publication.")
             return  # No target to process
         
         # Position, velocity, kp, kd, and torque 
-        MotorMotions = []
-        MotorMotions.append(self.build_motor_command(STAGE_2_X_MOTOR_ID, target.stage_2_x_angle * GAIN, 0.2, 1.0, 0.4, 1.0))
-        MotorMotions.append(self.build_motor_command(STAGE_2_Y_MOTOR_ID, target.stage_2_y_angle * GAIN, 0.2, 1.0, 0.4, 1.0))
-        MotorMotions.append(self.build_motor_command(STAGE_1_Y_MOTOR_ID, target.stage_1_y_angle * GAIN, 0.2, 1.0, 0.4, 1.0))
-        MotorMotions.append(self.build_motor_command(STAGE_1_X_MOTOR_ID, target.stage_1_x_angle * GAIN, 0.2, 1.0, 0.4, 1.0))
+        velocity = 0.1
+        kp = 10.0
+        kd = 1.0
+        torque = 0.0
         
-        # Each motorMotion corresponds to a single motor's command. Publish each one to the motor command topic.
-        for motorMotion in MotorMotions:
-            self.motor_pub.publish(motorMotion)
+        match self.next_motor:
+            case 0:
+                self.motor_pub.publish(self.build_motor_command(STAGE_2_Y_MOTOR_ID, target.stage_2_y_angle * GAIN, velocity, kp, kd, torque))
+            case 1:
+                self.motor_pub.publish(self.build_motor_command(STAGE_2_X_MOTOR_ID, target.stage_2_x_angle * GAIN, velocity, kp, kd, torque))
+            case 2:
+                self.motor_pub.publish(self.build_motor_command(STAGE_1_Y_MOTOR_ID, target.stage_1_y_angle * GAIN, velocity, kp, kd, torque))
+            case 3:
+                self.motor_pub.publish(self.build_motor_command(STAGE_1_X_MOTOR_ID, target.stage_1_x_angle * GAIN, velocity, kp, kd, torque))
             
-        self.get_logger().info(f"Published MotorMotionControl commands for all motors based on ArmTarget: {target}")
+        self.next_motor = (self.next_motor + 1) % 4  # Cycle through motor IDs 1-4
+        
+        self.get_logger().info(f"Published MotorMotionControl commands for motor {self.next_motor}.")
         return 
     
     

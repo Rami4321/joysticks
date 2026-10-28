@@ -7,6 +7,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <rclcpp/node.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -20,10 +21,12 @@ using MotorFeedback = carmy_motor_controller::msg::MotorFeedback;
 class MotorController : public rclcpp::Node {
 public:
   MotorController(std::vector<uint8_t>& motor_ids, std::vector<int>& motor_types)
-  // Initialize the ROS2 node with the name "motor_control_set_node" and create a RobStrideMotor instance
       : rclcpp::Node("motor_controller_node") {
 
-        // Create RobStrideMotor instances for each motor ID and type
+        // Create mutually exclusive callback groups for multi-threading
+        sub_cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        timer_cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+
         for (size_t i = 0; i < motor_ids.size(); ++i) {
           motors_.try_emplace(motor_ids[i], "can0", 0xFF, motor_ids[i], motor_types[i]);
         }
@@ -34,21 +37,22 @@ public:
           motor.enable_motor();
           usleep(1000);
         }
-    // Create a subscription to the "motion_control" topic and a publisher for the "motor_feedback" topic
+
+    auto sub_opt = rclcpp::SubscriptionOptions();
+    sub_opt.callback_group = sub_cb_group_;
+
     motion_sub_ = this->create_subscription<MotorMotionControl>(
-        "motion_control", 10,
+        "motion_control", 1,
         std::bind(&MotorController::motion_callback, this,
-                  std::placeholders::_1));
+                  std::placeholders::_1), sub_opt);
 
     feedback_pub_ = this->create_publisher<MotorFeedback>("motor_feedback", 10);
 
-    // Create a timer to call the hold_position function every 20 milliseconds
     publish_timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(20),
-        std::bind(&MotorController::hold_position, this));
+        std::chrono::milliseconds(30),
+        std::bind(&MotorController::hold_position, this), timer_cb_group_);
   }
 
-  // Destructor to disable all motors when the node is shut down
   ~MotorController() {
     for (auto& [id, motor] : motors_) {
       motor.Disenable_Motor(0);
@@ -56,38 +60,39 @@ public:
   }
 
   void motion_callback(const MotorMotionControl::SharedPtr msg) {
-    // Check if the motor ID from the message exists in the motors_ map
     auto it = motors_.find(msg->motor_id);
     if (it == motors_.end()) {
       RCLCPP_WARN(this->get_logger(), "Motor ID %d not found", msg->motor_id);
       return;
     }
 
-    // Update the target position, velocity, and connection status for the specified motor ID
+    // Lock the mutex to prevent race conditions with the CAN thread
+    std::lock_guard<std::mutex> lock(target_mutex_);
     target_position_[msg->motor_id] = msg->position;
     target_velocity_[msg->motor_id] = msg->velocity;
     target_connected_[msg->motor_id] = true;
     target_kp_[msg->motor_id] = msg->kp;
     target_kd_[msg->motor_id] = msg->kd;
     target_torque_[msg->motor_id] = msg->torque;
-
-    apply_target(msg->motor_id);
-
-    RCLCPP_INFO(this->get_logger(),
-                "motion cmd (motor %d): pos=%.3f vel=%.3f kp=%.3f kd=%.3f torque=%.3f",
-                msg->motor_id, msg->position, msg->velocity, msg->kp, msg->kd,
-                msg->torque);
   }
 
   void apply_target(uint8_t motor_id) {
-    // Check if the motor ID exists in the motors_ map
     auto it = motors_.find(motor_id);
     if (it == motors_.end()) return;
 
-    // Send the motion command to the motor and receive feedback
+    double t_pos, t_vel, t_kp, t_kd, t_tor;
+    {
+      // Lock mutex briefly to copy the freshest targets
+      std::lock_guard<std::mutex> lock(target_mutex_);
+      t_pos = target_position_[motor_id];
+      t_vel = target_velocity_[motor_id];
+      t_kp = target_kp_[motor_id];
+      t_kd = target_kd_[motor_id];
+      t_tor = target_torque_[motor_id];
+    }
+
     auto [position_feedback, velocity_feedback, torque, temperature] =
-        it->second.send_motion_command(target_torque_[motor_id], target_position_[motor_id],
-                                       target_velocity_[motor_id], target_kp_[motor_id], target_kd_[motor_id]);
+        it->second.send_motion_command(t_tor, t_pos, t_vel, t_kp, t_kd);
     
     last_feedback_[motor_id].position = position_feedback;
     last_feedback_[motor_id].velocity = velocity_feedback;
@@ -96,7 +101,6 @@ public:
   }
 
   void hold_position() {
-    // Apply the last known target position for each motor to maintain its position
     for (auto& [motor_id, motor] : motors_) {
       apply_target(motor_id);
     }
@@ -104,37 +108,25 @@ public:
   }
 
   void publish_feedback() {
-    // Publish feedback for each motor
     for (auto& [motor_id, motor] : motors_) {
       auto feedback = MotorFeedback();
       feedback.motor_id = motor_id;
 
-      try {
-        motor.receive_status_frame();
-      } catch (const std::exception &e) {
-        RCLCPP_WARN(this->get_logger(), "feedback read failed for motor %d: %s", motor_id, e.what());
-        continue;
-      }
-
       auto [position_feedback, velocity_feedback, torque, temperature] =
           motor.return_data_pvtt();
 
-      // If the motor is not connected, change the connection status, and log a warning message
       if (position_feedback == 0.0 && velocity_feedback == 0.0 && torque == 0.0 && temperature == 0.0) {
-        // Motors with null feedback are considered disconnected
         RCLCPP_WARN(this->get_logger(), "Motor %d is not detected!", motor_id);
         feedback.connected = false;
       } else {
         feedback.connected = true;
       }
 
-      // Update the last feedback for the motor
       feedback.position = position_feedback;
       feedback.velocity = velocity_feedback;
       feedback.torque = torque;
       feedback.temperature = temperature;
 
-      // Publish the feedback message if the ROS2 node is still running
       if (rclcpp::ok()) {
         feedback_pub_->publish(feedback);
       }
@@ -142,13 +134,15 @@ public:
   }
 
 private:
-  // ROS2 subscription and publisher for motor control and feedback
+  rclcpp::CallbackGroup::SharedPtr sub_cb_group_;
+  rclcpp::CallbackGroup::SharedPtr timer_cb_group_;
+  std::mutex target_mutex_;
+
   rclcpp::Subscription<MotorMotionControl>::SharedPtr motion_sub_;
   rclcpp::Publisher<MotorFeedback>::SharedPtr feedback_pub_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   std::map<uint8_t, RobStrideMotor> motors_;
-
   std::map<uint8_t, double> target_position_;
   std::map<uint8_t, double> target_velocity_;
   std::map<uint8_t, double> target_kp_;
@@ -156,7 +150,6 @@ private:
   std::map<uint8_t, double> target_torque_;
   std::map<uint8_t, bool> target_connected_;
 
-  // Structure to hold the last feedback received from each motor
   struct MotionFeedback {
     bool connected = false;
     double position = 0.0;
@@ -168,18 +161,17 @@ private:
 };
 
 int main(int argc, char **argv) {
-  // Defining the motor IDs to be used in the node
   std::vector<uint8_t> motor_ids = {0x01, 0x02, 0x03, 0x04};
-  std::vector<int> motor_types = {4, 4, 4, 4}; // All motors are EDULite05s
+  std::vector<int> motor_types = {4, 4, 4, 4}; 
 
   rclcpp::init(argc, argv);
-
   auto controller = std::make_shared<MotorController>(motor_ids, motor_types);
   
-
-  rclcpp::spin(controller);
+  // Use a MultiThreadedExecutor so CAN timeouts cannot starve the network subscriber
+  rclcpp::executors::MultiThreadedExecutor executor;
+  executor.add_node(controller);
+  executor.spin();
 
   rclcpp::shutdown();
-
   return 0;
 }
