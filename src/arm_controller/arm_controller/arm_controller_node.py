@@ -67,7 +67,9 @@ class ArmControllerNode(Node):
         if target is None:
             self.get_logger().info("No ArmTarget received yet. Skipping motor command publication.")
             return  # No target to process
-        
+        if not target.enabled:
+            self.get_logger().info("ArmTarget is not enabled. Skipping motor command publication.")
+            return  # Arm target is not enabled
         # Position, velocity, kp, kd, and torque 
         velocity = 0.1
         kp = 10.0
