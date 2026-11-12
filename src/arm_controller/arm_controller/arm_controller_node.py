@@ -9,7 +9,7 @@ import math
 
 # Constants
 # How much to scale the arm target angles into motor commands. This is a placeholder value and should be tuned based on the actual arm mechanics.
-GAIN = math.pi * 10
+GAIN = math.pi * 3 * 1.5
 
 STAGE_1_X_MOTOR_ID = 1
 STAGE_1_Y_MOTOR_ID = 2
@@ -71,7 +71,7 @@ class ArmControllerNode(Node):
             self.get_logger().info("ArmTarget is not enabled. Skipping motor command publication.")
             return  # Arm target is not enabled
         # Position, velocity, kp, kd, and torque 
-        velocity = 0.1
+        velocity = 0.0
         kp = 10.0
         kd = 1.0
         torque = 0.0
@@ -82,9 +82,9 @@ class ArmControllerNode(Node):
             case 1:
                 self.motor_pub.publish(self.build_motor_command(STAGE_2_X_MOTOR_ID, target.stage_2_x_angle * GAIN, velocity, kp, kd, torque))
             case 2:
-                self.motor_pub.publish(self.build_motor_command(STAGE_1_Y_MOTOR_ID, target.stage_1_y_angle * GAIN, velocity, kp, kd, torque))
+                self.motor_pub.publish(self.build_motor_command(STAGE_1_Y_MOTOR_ID, (target.stage_1_y_angle * GAIN) + 5.5, velocity, kp, kd, torque))
             case 3:
-                self.motor_pub.publish(self.build_motor_command(STAGE_1_X_MOTOR_ID, target.stage_1_x_angle * GAIN, velocity, kp, kd, torque))
+                self.motor_pub.publish(self.build_motor_command(STAGE_1_X_MOTOR_ID, (target.stage_1_x_angle * GAIN) + 7.4, velocity, kp, kd, torque))
             
         self.next_motor = (self.next_motor + 1) % 4  # Cycle through motor IDs 1-4
         

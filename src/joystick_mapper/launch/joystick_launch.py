@@ -14,7 +14,6 @@ def generate_launch_description():
                 name='joy_stage_1',
                 output='log',
                 parameters=[{
-                    'dev': '/dev/input/js0',
                     'device_id': 0,
                     'deadzone': 0.05,
                     'autorepeat_rate': 20.0,
@@ -31,7 +30,6 @@ def generate_launch_description():
                 name='joy_stage_2',
                 output='log',
                 parameters=[{
-                    'dev': '/dev/input/js1',
                     'device_id': 1,
                     'deadzone': 0.05,
                     'autorepeat_rate': 20.0,
