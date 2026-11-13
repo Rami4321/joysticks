@@ -68,7 +68,7 @@ ros2 run carmy_motor_controller rs_motor_ros2_node
 To run the Joystick controller node/s
 
 ```bash
-ros2 launch joystick_translator joystick_launch.py
+ros2 run arm_controller arm_controller_node
 ```
 
 ## GUI support (for rqt / visualization tools)

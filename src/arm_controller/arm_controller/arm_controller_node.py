@@ -42,8 +42,9 @@ class ArmControllerNode(Node):
         self.pose = {name: [0.0, 0.0, 0.0, 0.0] for name in ID_TO_MOTOR_NAME.values()}  # Store the latest motor feedback
         
         self.next_motor = 1  # Initialize the next motor to be controlled
-        
-        
+
+        # Read current motor positions and set homing offsets. These values should be determined through calibration.
+        self.homing_offsets = {name: None for name in ID_TO_MOTOR_NAME.values()}
 
     # Callback for receiving arm target messages
     def handle_arm_target(self, msg: ArmTarget):
@@ -51,16 +52,22 @@ class ArmControllerNode(Node):
         self.get_logger().info(f"Received ArmTarget: stage_1_x_angle={msg.stage_1_x_angle}, stage_1_y_angle={msg.stage_1_y_angle}, stage_2_x_angle={msg.stage_2_x_angle}, stage_2_y_angle={msg.stage_2_y_angle}, gripper={msg.gripper}, mode={msg.mode}, enabled={msg.enabled}")
         
         self.joystick_target = msg
-
     
     # Callback for receiving motor feedback messages
     def handle_motor_feedback(self, msg: MotorFeedback):
         # Log the received motor feedback for debugging
         self.get_logger().info(f"Received MotorFeedback: motor_id={msg.motor_id}, position={msg.position}, velocity={msg.velocity}, torque={msg.torque}, temperature={msg.temperature}")
-        
-        self.pose[ID_TO_MOTOR_NAME[msg.motor_id]] = [msg.position, msg.velocity, msg.torque, msg.temperature]
+        motor_name = ID_TO_MOTOR_NAME.get(msg.motor_id)
+        if motor_name is None:
+            self.get_logger().warning(f"Unknown motor_id={msg.motor_id} in feedback. Ignoring.")
+            return
 
+        self.pose[motor_name] = [msg.position, msg.velocity, msg.torque, msg.temperature]
 
+        # Latch homing offset once per motor from the first feedback sample.
+        if self.homing_offsets[motor_name] is None:
+            self.homing_offsets[motor_name] = msg.position
+            
     # Convert target pose/angles into MotorMotionControl messages
     def publish_motor_commands(self):
         target = self.joystick_target
@@ -75,16 +82,18 @@ class ArmControllerNode(Node):
         kp = 10.0
         kd = 1.0
         torque = 0.0
-        
+        if any(offset is None for offset in self.homing_offsets.values()):
+            self.get_logger().info("Homing offsets not set yet. Skipping motor command publication.")
+            return  # Homing offsets not set yet
         match self.next_motor:
             case 0:
-                self.motor_pub.publish(self.build_motor_command(STAGE_2_Y_MOTOR_ID, target.stage_2_y_angle * GAIN, velocity, kp, kd, torque))
+                self.motor_pub.publish(self.build_motor_command(STAGE_2_Y_MOTOR_ID, (target.stage_2_y_angle * GAIN) + self.homing_offsets["stage_2_y"], velocity, kp, kd, torque))
             case 1:
-                self.motor_pub.publish(self.build_motor_command(STAGE_2_X_MOTOR_ID, target.stage_2_x_angle * GAIN, velocity, kp, kd, torque))
+                self.motor_pub.publish(self.build_motor_command(STAGE_2_X_MOTOR_ID, (target.stage_2_x_angle * GAIN) + self.homing_offsets["stage_2_x"], velocity, kp, kd, torque))
             case 2:
-                self.motor_pub.publish(self.build_motor_command(STAGE_1_Y_MOTOR_ID, (target.stage_1_y_angle * GAIN) + 5.5, velocity, kp, kd, torque))
+                self.motor_pub.publish(self.build_motor_command(STAGE_1_Y_MOTOR_ID, (target.stage_1_y_angle * GAIN) + self.homing_offsets["stage_1_y"], velocity, kp, kd, torque))
             case 3:
-                self.motor_pub.publish(self.build_motor_command(STAGE_1_X_MOTOR_ID, (target.stage_1_x_angle * GAIN) + 7.4, velocity, kp, kd, torque))
+                self.motor_pub.publish(self.build_motor_command(STAGE_1_X_MOTOR_ID, (target.stage_1_x_angle * GAIN) + self.homing_offsets["stage_1_x"], velocity, kp, kd, torque))
             
         self.next_motor = (self.next_motor + 1) % 4  # Cycle through motor IDs 1-4
         
